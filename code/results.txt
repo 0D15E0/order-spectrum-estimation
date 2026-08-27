@@ -1,0 +1,77 @@
+
+==============================================================================
+E1  H(s) = 1/(s^2+4s+5), step response, corrected unit-circle pipeline
+==============================================================================
+window A=12.0, time samples Nt=65537, circle samples Nu=64
+steady state estimated from tail; max |Im a_n| = 2.57e-17
+
+ n          exact a_n  corrected (est y_inf)  corrected (known y_inf)     naive pipeline
+ 0    +0.200000000000        +0.200000000005          +0.200000000000        2.21689e-12
+ 1    -0.160000000000        -0.160000000057          -0.159999999997               2.24
+ 2    +0.088000000000        +0.088000000323          +0.087999999966            -14.312
+ 3    -0.038400000000        -0.038400001209          -0.038399999777            57.5616
+ 4    +0.013120000000        +0.013120003331          +0.013119999036           -172.787
+ 5    -0.002816000000        -0.002816007179          -0.002815996870            414.717
+ 6    -0.000371200000        -0.000371187522          -0.000371208139            -829.44
+
+max abs error, corrected (estimated y_inf): 1.248e-08
+max abs error, corrected (known y_inf): 8.139e-09
+naive-pipeline excess at bin 1: predicted 2.400, observed 2.400
+
+==============================================================================
+E2  Aliasing obstruction: F(s)=s^{-1/2} sampled on the unit circle
+------------------------------------------------------------------------------
+first bins of the circle FFT vs exact Fourier coefficients of the
+single-valued restriction, c_m = -i/(pi (m+1/2)) aliased over m+1*Nu:
+  m      |FFT bin|    |c_m| = 1/(pi|m+1/2|)
+  0       0.636684                 0.636620
+  1       0.212398                 0.212207
+  2       0.127644                 0.127324
+  3       0.091395                 0.090946
+  5       0.058584                 0.057875
+ 10       0.031700                 0.030315
+ 20       0.018494                 0.015527
+ 31       0.015630                 0.010105
+
+-> energy spread over ALL integer bins with ~1/(m+1/2) decay;
+no line at alpha = -1/2 can ever appear: the circle transform of
+any data is exactly 2pi-periodic, so its FFT support is Z.
+
+------------------------------------------------------------------------------
+E3  Log-spiral + matrix pencil, exact samples of H(s) = s^{-1/2} + 0.5 s^{1.3}
+==============================================================================
+
+N=  8, relative sample noise 0:
+  true alpha=-0.5, c=1.0  ->  alpha = -0.500000000000 +1.0e-15i, c = +1.0000000000
+  true alpha=+1.3, c=0.5  ->  alpha = +1.300000000000 +1.4e-15i, c = +0.5000000000
+  singular values of pencil matrix: 4.27e+00, 1.12e+00, 4.20e-16, 2.69e-16, ...
+  order-position errors: 2.22e-16
+
+N= 64, relative sample noise 1e-08:
+  true alpha=-0.5, c=1.0  ->  alpha = -0.500000004652 +4.4e-10i, c = +1.0000000007
+  true alpha=+1.3, c=0.5  ->  alpha = +1.299999999693 +1.1e-09i, c = +0.5000000086
+  singular values of pencil matrix: 4.69e+02, 1.46e+01, 4.46e-06, 2.73e-06, ...
+  order-position errors: 4.65e-09
+
+N= 64, relative sample noise 0.0001:
+  true alpha=-0.5, c=1.0  ->  alpha = -0.500046657547 +4.4e-06i, c = +1.0000071726
+  true alpha=+1.3, c=0.5  ->  alpha = +1.299996932771 +1.1e-05i, c = +0.5000860033
+  singular values of pencil matrix: 4.69e+02, 1.46e+01, 4.46e-02, 2.73e-02, ...
+  order-position errors: 4.67e-05
+
+==============================================================================
+E4  Data-driven fractional identification: y(t)=1/sqrt(pi*t) + 2,
+    Y(s) = s^{-1/2} + 2 s^{-1}; spiral arc in the right half-plane
+------------------------------------------------------------------------------
+
+measurement noise (relative, on y samples): 0
+  singular values of pencil matrix: 9.71e+01, 8.87e-01, 1.04e-09, 1.50e-13, ...
+  true alpha=-1.0, c=2.0  ->  alpha = -1.00000000 -6.4e-10i, c = +1.99999999
+  true alpha=-0.5, c=1.0  ->  alpha = -0.50000000 -9.2e-10i, c = +1.00000001
+  order-position errors: 1.76e-09
+
+measurement noise (relative, on y samples): 0.0001
+  singular values of pencil matrix: 9.71e+01, 8.86e-01, 7.81e-06, 2.39e-06, ...
+  true alpha=-1.0, c=2.0  ->  alpha = -0.99997350 -1.7e-05i, c = +2.00020949
+  true alpha=-0.5, c=1.0  ->  alpha = -0.49995259 -2.9e-05i, c = +0.99978637
+  order-position errors: 4.74e-05

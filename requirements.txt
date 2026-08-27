@@ -1,0 +1,11 @@
+numpy
+
+# needed for cantor_pencil.py and deaf_channel.py, which use mpmath only
+# to compute independent reference values of the Riemann zeta function
+# to check the estimator's output (no zeta values enter the estimator's
+# input); order_spectrum.py itself is NumPy-only
+mpmath
+
+# optional: only needed to regenerate docs/figures/*.png via
+# code/generate_e4_figures.py (order_spectrum.py itself is NumPy-only)
+matplotlib

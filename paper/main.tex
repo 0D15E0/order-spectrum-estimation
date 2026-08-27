@@ -1,0 +1,977 @@
+\documentclass[11pt, a4paper]{article}
+\usepackage[margin=2.7cm]{geometry}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!60!black,citecolor=blue!60!black,urlcolor=blue!60!black]{hyperref}
+\hypersetup{pdftitle={Identification of the order distribution of linear
+systems by line-spectrum estimation on logarithmic spirals}}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\dd}{\,\mathrm{d}}
+\newcommand{\ii}{\mathrm{i}}
+\newcommand{\ee}{\mathrm{e}}
+
+\title{Identification of the order distribution of linear systems\\
+by line-spectrum estimation on logarithmic spirals}
+\author{Ing.\ Ulises Merlan\thanks{Ingeniero Electr\'onico, Universidad
+Tecnol\'ogica Nacional, Facultad Regional Buenos Aires. Email:
+\texttt{ulimerlan@frba.utn.edu.ar}.}}
+\date{July 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A linear time-invariant system whose transfer function admits the
+distributed-order representation $H(s)=\int_\R \mathcal{A}(\alpha)\,
+s^{\alpha} \dd\alpha$ is characterized by its \emph{order distribution}
+$\mathcal{A}$: integer-order systems correspond to Dirac combs supported on
+$\Z$ whose weights are Laurent--Taylor coefficients, while fractional-order
+systems place mass at non-integer $\alpha$s. Because the order integral is a
+Laplace transform of $\mathcal{A}$ in the variable $\log s$, sampling $H$ on
+the unit circle $s=\ee^{\ii u}$ and applying an FFT suggests itself as a
+direct, closed-form estimator of $\mathcal{A}$ from measured data. We show
+that this natural estimator is subject to two structural obstructions:
+(i)~a truncation bias, computed here in closed form, which corrupts every
+coefficient whenever the measured response has a non-zero steady state; and
+(ii)~an aliasing theorem stating that any transform computed from time-domain
+data via $s=\ee^{\ii u}$ is exactly $2\pi$-periodic, so its inverse Fourier
+transform is supported on $\Z$ and non-integer orders can \emph{never} appear
+as spectral lines, only as slowly decaying integer combs. We then repair
+both defects: subtracting the measured steady state reduces the integer-order
+problem to classical Cauchy-integral coefficient extraction
+(Lyness--Moler), and replacing the circle by a \emph{logarithmic spiral}
+$s=\ee^{(\sigma+\ii)u}$, $\sigma\neq0$, breaks the periodicity, turning
+order recovery into a line-spectrum estimation problem solvable by
+matrix-pencil methods. Numerical experiments recover the seven leading
+Taylor coefficients of a second-order test system from its sampled step
+response with error ${\sim}10^{-8}$, and recover the order pair
+$(-1,-\tfrac12)$ (one integer, one fractional line) of a signal, from raw
+time samples with error ${\sim}2\times10^{-9}$ (noise-free) and
+${\sim}5\times10^{-5}$ under $10^{-4}$ relative measurement noise. As a
+calibration benchmark, the estimator recovers the complex dimensions of
+the Cantor fractal string---known in closed form---from geometric
+counting data alone, with damping estimates matching the exact value
+$D=\log2/\log3$ to six decimals, and, from spectral counting data,
+recovers the same dimensions together with channel gains matching
+independently computed values of the Riemann zeta function to four
+decimals. An open-source implementation is provided.
+\end{abstract}
+
+\noindent\textbf{Keywords:} fractional calculus, distributed-order systems,
+order distribution, system identification, Mellin transform, matrix pencil,
+Cauchy integrals, fractal strings, complex dimensions.
+
+\noindent\textbf{2020 MSC:} 26A33, 93B30, 65F99.
+
+\section{Introduction}\label{sec:intro}
+
+Fractional-order models---systems governed by derivatives
+$D^{\alpha}$ of non-integer order $\alpha$---arise in viscoelasticity,
+electrochemistry, anomalous diffusion, and control
+\cite{DingReview2021, JiaoChenPodlubny2012}. A strictly more general class
+allows a \emph{continuum} of orders: distributed-order operators
+$\int \mathcal{A}(\alpha) D^{\alpha}y \dd\alpha$, introduced by Caputo
+\cite{Caputo1969,Caputo1995, Caputo2001} and developed by Bagley and Torvik
+\cite{BagleyTorvik2000a,BagleyTorvik2000b} and by Lorenzo and Hartley
+\cite{LorenzoHartley2002}. In the Laplace domain (zero initial conditions)
+such a system has transfer function
+\begin{equation}\label{eq:orderintegral}
+H(s) \;=\; \int_{\R} \mathcal{A}(\alpha)\, s^{\alpha} \dd\alpha ,
+\end{equation}
+and the density $\mathcal{A}$, called the \emph{order distribution}
+\cite{HartleyLorenzo1999,HartleyLorenzo2003}, is the natural object of
+identification: an integer-order rational system corresponds to
+$\mathcal{A}$ being a finite or geometric-weight Dirac comb on the integers,
+a commensurate fractional system to a comb on $q\Z$ for some $q\in(0,1)$,
+and genuinely distributed systems to continuous densities.
+
+Identifying $\mathcal{A}$ from measured data is a recognized problem.
+Published approaches discretize the order axis and fit the weights by least
+squares to frequency-response data
+\cite{HartleyLorenzo2003,NazarianHaeri2010,DuanLi2021}, estimate discrete
+fractional orders by nonlinear optimization or instrumental variables
+\cite{VictorMalti2013,VictorMalti2022}, read asymptotic Bode slopes, or, in
+the PDE setting, exploit analyticity of solutions in inverse-problem
+frameworks \cite{LiuSunYamamoto2021}. What makes a \emph{closed-form}
+alternative tempting is a structural identity already noted in
+\cite{HartleyLorenzo1999}: the right-hand side of \eqref{eq:orderintegral}
+is a (bilateral) Laplace transform of $\mathcal{A}$ with transform variable
+$-\log s$. Consequently, on the unit circle $s=\ee^{\ii u}$ the identity
+reads $H(\ee^{\ii u})=\int\mathcal{A}(\alpha)\ee^{\ii u\alpha}\dd\alpha$: a
+Fourier transform. One is led to the estimator
+\begin{equation}\label{eq:naiveinversion}
+\mathcal{A}(\alpha) \;=\; \frac{1}{2\pi}\int_{\R}
+H(\ee^{\ii u}) \, \ee^{-\ii u\alpha}\dd u ,
+\end{equation}
+computable by an FFT from samples of $H$ on the circle, which in turn can be
+obtained from a measured step or impulse response by numerically evaluating
+its Laplace transform at $s=\ee^{\ii u_k}$. Orders present in the system
+would then appear as spectral lines of $\mathcal{A}$, integer or not.
+
+This paper analyzes that program and establishes exactly how much of it
+survives contact with measured data. Our contributions are:
+
+\begin{enumerate}
+\item \textbf{A corrected integer-order pipeline with an exact bias
+formula.} The naive estimator applied to a step response with steady state
+$y_\infty\neq0$ suffers a truncation bias
+$-y_\infty(-A)^{m+1}/(m+1)!$ at integer order $m$, where $A$ is the
+measurement window (Proposition~\ref{prop:bias}); the bias grows
+exponentially in $A$ across the bins (like $\ee^{A}$ up to algebraic
+factors) and dwarfs the true coefficients. Subtracting the measured steady
+state before transforming removes it entirely and reduces the method to
+Cauchy-integral coefficient extraction in the sense of Lyness and Moler
+\cite{LynessMoler1967} (Section~\ref{sec:circle}).
+
+\item \textbf{An aliasing obstruction.} Any function of $u$ computed from
+time samples through $s=\ee^{\ii u}$ is exactly $2\pi$-periodic; therefore
+its inverse Fourier transform is supported on $\Z$
+(Theorem~\ref{thm:aliasing}). Non-integer orders are structurally invisible
+to the unit-circle readout of black-box data: a branch cut manifests itself
+only as an integer comb with slow $\mathcal{O}(1/m)$ decay, for which we
+give a closed-form example. This clarifies which claims of the closed-form
+program hold for transfer functions known analytically (where the Riemann
+surface of $s^{\alpha}$ can be unwound) but fail for data.
+
+\item \textbf{A logarithmic-spiral estimator for fractional orders.}
+Sampling the data transform on $s=\ee^{(\sigma+\ii)u}$ with $\sigma\neq0$
+makes $\log s$ single-valued and injective along the contour; a finite
+order comb then produces an exponential sum in the sample index, and the
+orders and weights follow from a matrix-pencil line-spectrum estimate
+\cite{HuaSarkar1990} (Section~\ref{sec:spiral}). The estimator works
+directly on raw time samples, with the contour restricted to an arc in the
+right half-plane to keep the data transform convergent.
+
+\item \textbf{Numerical validation and open code.} On the step response of
+$H(s)=1/(s^{2}+4s+5)$, the corrected circle pipeline recovers
+$a_0,\dots,a_6$ with maximum error $1.2\times10^{-8}$, the steady state
+being estimated from the data itself; the spiral estimator recovers the
+order pair $(-1,-\tfrac12)$ of $y(t)=1/\sqrt{\pi t}+2$ from time samples
+with error $1.8\times10^{-9}$, degrading to $4.7\times10^{-5}$ under
+$10^{-4}$ relative noise (Section~\ref{sec:experiments}).
+
+\item \textbf{A calibration benchmark from fractal geometry.} The estimator
+is validated against complex dimensions of self-similar fractal strings, a
+setting where the ``uniform damping'' question---conjectural for the
+Riemann zeta function---is a \emph{theorem}: for the Cantor string, the
+estimator recovers eight complex dimensions from geometric data with all
+damping estimates equal to the exact value $D=\log2/\log3$ to six
+decimals, and, from spectral counting data alone, recovers the same
+dimensions together with channel gains matching independently computed
+values of $|\zeta|$ to four decimals in every mode---an acoustic
+measurement of the zeta function realizing the classical spectral
+factorization $\zeta_\nu=\zeta_{\mathcal{L}}\cdot\zeta$ as a live transfer
+function (Section~\ref{sec:e5}). A further experiment exhibits the
+estimator's channel gain vanishing, as theory predicts, at a zeta zero.
+\end{enumerate}
+
+Section~\ref{sec:related} positions these results against the
+distributed-order identification literature and against the numerical
+analysis of Cauchy-integral coefficient extraction; proofs of the two
+propositions are collected in Appendix~\ref{app:proofs}.
+
+\section{The order-distribution representation}\label{sec:representation}
+
+Throughout, $s^{\alpha}=\ee^{\alpha\log s}$ with a branch of $\log$ fixed by
+the contour under discussion, and $\mathcal{A}$ is a tempered distribution
+on $\R$; \eqref{eq:orderintegral} is read in the distributional sense.
+
+\begin{definition}\label{def:orderdist}
+Let $H$ be analytic on an open annulus
+$\Omega=\{r_1<|s|<r_2\}$, $0\le r_1<r_2\le\infty$. A tempered distribution
+$\mathcal{A}$ on $\R$ is an \emph{order distribution for $H$ on $\Omega$} if
+\[
+H(\ee^{w})=\big\langle \mathcal{A}(\alpha), \ee^{\alpha w}\big\rangle
+\]
+for all $w$ with $\log r_1<\operatorname{Re}w<\log r_2$.
+\end{definition}
+
+\begin{example}\label{ex:laurent}
+If $H$ is analytic on an annulus containing $|s|=1$ and single-valued, its
+Laurent expansion $H(s)=\sum_{n\in\Z}a_n s^{n}$ converges there with
+geometrically decaying $a_n$, and
+\[
+\mathcal{A}=\sum_{n\in\Z}a_n\, \delta(\alpha-n)
+\]
+is an order distribution for $H$: the classical case. For instance,
+$H(s)=s^{2}+k$ gives $\delta(\alpha-2)+k\, \delta(\alpha)$;
+$H(s)=(s+1)/s$ gives $\delta(\alpha)+\delta(\alpha+1)$;
+$H(s)=1/(s^{2}+2)$ gives $\sum_{n\ge0}(-1)^{n}2^{-(n+1)}
+\delta(\alpha-2n)$ on $|s|<\sqrt2$. A Caputo-type fractional term
+contributes mass at its order: $H(s)=s^{1/2}$ has
+$\mathcal{A}=\delta(\alpha-\tfrac12)$ on the universal cover of
+$\C\setminus\{0\}$.
+\end{example}
+
+\begin{remark}[Non-uniqueness]\label{rem:annulus}
+The order distribution depends on the annulus. E.g.\
+$1/(s^{2}+2)$ also equals $\sum_{n\ge0}(-1)^{n}2^{n}s^{-2n-2}$ on
+$|s|>\sqrt2$, a different comb. Statements such as ``the positions of the
+deltas reveal the orders of the system'' are therefore well-posed only once
+a contour (equivalently, a strip of the Mellin variable) is fixed. In what
+follows the annulus is always the one containing the sampling contour.
+\end{remark}
+
+Writing $s=\ee^{\ii u}$, $u\in\R$, Definition~\ref{def:orderdist} gives the
+Fourier pair
+\begin{equation}\label{eq:fourierpair}
+H(\ee^{\ii u})=\int_\R \mathcal{A}(\alpha) \, \ee^{\ii u\alpha} \dd\alpha ,
+\qquad
+\mathcal{A}(\alpha)=\frac{1}{2\pi}\int_{\R} H(\ee^{\ii u})\,
+\ee^{-\ii u\alpha}\dd u ,
+\end{equation}
+where for multivalued $H$ the left-hand side denotes the lift along the
+universal cover (i.e.\ $u$ is \emph{not} reduced modulo $2\pi$). When
+$\mathcal{A}=\sum_n a_n\, \delta(\alpha-n)$, the weights are given by the
+Cauchy formula: substituting $s=\ee^{\ii u}$, $\dd s=\ii s\dd u$,
+\begin{equation}\label{eq:cauchy}
+a_n\;=\; \frac{1}{2\pi\ii}
+\oint_{|s|=1} \frac{H(s)}{s^{n+1}}\dd s ,
+\end{equation}
+with the kernel $s^{-\alpha-1}$ (not $s^{-\alpha}$): the Jacobian
+$\dd s/s$ is what aligns the continuous inversion with the classical
+coefficient formula. Under $s=\ee^{-p}$, \eqref{eq:orderintegral} is a
+bilateral Laplace transform of $\mathcal{A}$; the representation and its
+inversion are thus an instance of the Mellin correspondence
+\cite{LuchkoKiryakova2013}, and the interpolation of power-series
+coefficients to continuous order is the territory of Ramanujan's master
+theorem. None of this section is new mathematics; it fixes notation and
+conventions for the data-driven question that follows.
+
+\section{Recovery from measured data on the unit circle}\label{sec:circle}
+
+Let the system be excited by a unit step, $X(s)=1/s$, and let
+$y(t)$, $t\in[0,A]$, be the measured response, so that
+$Y(s)=H(s)/s$. The data provide the \emph{truncated} transform
+\begin{equation}\label{eq:truncated}
+\widehat{Y}_{\!A}(s)\;=\;\int_0^{A} y(\tau)\,\ee^{-s\tau}\dd\tau ,
+\end{equation}
+an entire function of $s$ computable by quadrature at any $s_k=\ee^{\ii u_k}$.
+The naive pipeline evaluates \eqref{eq:truncated} on the circle, multiplies
+by $s$ to undo the input, and applies a DFT across $u$ to read off the comb
+weights. Two elementary identities explain its behavior exactly.
+
+\begin{proposition}[Aliased-moment identity]\label{prop:moments}
+Let $u_k=2\pi k/N$, $k=0, \dots,N-1$, and let
+$\widehat{y}(u)=\widehat{Y}_{\!A}(\ee^{\ii u})$. Then the $m$-th DFT bin of
+$\{\widehat{y}(u_k)\}$ equals
+\[
+\frac{1}{N} \sum_{k=0}^{N-1} \widehat{y}(u_k) \, \ee^{-2\pi\ii mk/N}
+=\sum_{\substack{j\ge0\\ j\equiv m \pmod{N}}}
+\frac{(-1)^{j}}{j!}\int_0^{A}\tau^{j}y(\tau) \dd\tau.
+\]
+In particular the bins are (aliased, signed, truncated) \emph{time moments}
+of the data, indexed by non-negative integers only.
+\end{proposition}
+
+Time moments are the classical carriers of the $s\to0$ expansion of a
+transfer function in moment-matching identification and model reduction
+\cite{GibilaroLees1969}; Proposition~\ref{prop:moments} shows the circle
+pipeline is an FFT reorganization of them. It also shows the pipeline
+returns nothing at negative orders---so the $1/s$ of the step input cannot
+appear at $\alpha=-1$ and must be handled separately---and nothing at
+non-integer orders, foreshadowing Theorem~\ref{thm:aliasing}.
+
+\begin{proposition}[Truncation bias]\label{prop:bias}
+Suppose $y(t)=y_\infty+g(t)$ with $|g(t)|\le C\ee^{-\beta t}$, $\beta>0$
+(stable step response, $y_\infty=H(0)$). Then
+\[
+\widehat{Y}_{\!A}(s)\;=\;\frac{y_\infty}{s}\;+\;G(s) \;-\;
+\frac{y_\infty \ee^{-sA}}{s} ,
+\qquad G(s)=\int_0^{\infty} g(\tau)\ee^{-s\tau}\dd\tau ,
+\]
+and the entire function $-y_\infty\ee^{-sA}/s + y_\infty/s
+= -y_\infty\sum_{m\ge0}\frac{(-A)^{m+1}}{(m+1)!}\, s^{m}$ contributes the
+bias
+\begin{equation}\label{eq:bias}
+b_m \;=\; -y_\infty \, \frac{(-A)^{m+1}}{(m+1)!}
+\end{equation}
+to the coefficient of $s^{m}$ for every $m\ge0$---hence, up to the
+$m+\ell N$ aliasing of Proposition~\ref{prop:moments} (negligible for
+$N\gg A$), to DFT bin $m$---while the $g$-tail term is bounded by
+$C\, \ee^{-(\beta+\cos u)A}/(\beta+\cos u)$ for $\cos u>-\beta$.
+\end{proposition}
+
+For any useful window the bias \eqref{eq:bias} is catastrophic: with
+$y_\infty=0.2$ and $A=12$, $b_0=2.4$ against a true coefficient
+$a_1=-0.16$ (the naive pipeline's $s$-multiplication shifts $b_m$ up one
+bin), and $b_5=-829.4$. The experiment in
+Section~\ref{sec:experiments} reproduces \eqref{eq:bias} to all printed
+digits. The repair is equally explicit:
+
+\begin{corollary}[Corrected pipeline]\label{cor:corrected}
+Estimate $y_\infty$ from the tail of the record, form $g=y-y_\infty$, and
+\begin{equation}\label{eq:corrected}
+H(\ee^{\ii u_k})\; \approx\; y_\infty \;+\; \ee^{\ii u_k}\,
+\widehat{G}_{\!A}(\ee^{\ii u_k}),
+\qquad \widehat{G}_{\!A}(s)=\int_0^{A}g(\tau)\ee^{-s\tau}\dd\tau ,
+\end{equation}
+before the DFT. If every pole of $H$ satisfies
+$\operatorname{Re}(\text{pole})<-1$ (more generally, if the circle radius
+$r$ is chosen with $r<\beta$), the total error in each recovered
+coefficient is $\mathcal{O}(\ee^{-(\beta-1)A})$ plus quadrature error, and
+the procedure coincides with Cauchy-integral coefficient extraction
+\cite{LynessMoler1967,Henrici1979, Fornberg1981} applied to $H$ itself,
+which the data reconstruct as $y_\infty+s\, \widehat{G}_{\!A}(s)$: here
+$\widehat{G}_{\!A}(s)$ approximates the transient transform
+$G(s)=(H(s)-H(0))/s$, which is analytic at $s=0$, with error bounded by
+the $g$-tail term of Proposition~\ref{prop:bias}.
+\end{corollary}
+
+The radius condition matters: for slow systems ($\beta\le1$) the truncated
+transform of $g$ no longer converges to $G$ as $A$ grows on the arc
+$\cos u\le-\beta$, and the evaluation contour must be shrunk to
+$|s|=r<\beta$, rescaling the recovered coefficients by $r^{-n}$; the
+conditioning trade-offs of the radius choice are analyzed in depth by
+Bornemann \cite{Bornemann2011} (see also
+\cite{AustinKravanjaTrefethen2014}).
+
+\subsection{The aliasing obstruction}\label{sec:aliasing}
+
+\begin{theorem}[Integer-support aliasing]\label{thm:aliasing}
+Let $y\in L^{1}_{\mathrm{loc}}[0, \infty)$ and $A\le\infty$ be such that
+$\widehat{y}(u)=\int_0^{A}y(\tau)\,\ee^{-\tau \ee^{\ii u}}\dd\tau$ converges
+for all $u$. Then $\widehat{y}(u+2\pi)=\widehat{y}(u)$ identically.
+Consequently, if $\widehat{y}(u)=\int_{\R} \mathcal{B}(\alpha)\ee^{\ii
+u\alpha}\dd\alpha$ for a tempered distribution $\mathcal{B}$, then
+$\operatorname{supp}\mathcal{B}\subseteq\Z$.
+\end{theorem}
+
+\begin{proof}
+The integrand depends on $u$ only through $\ee^{\ii u}$. A $2\pi$-periodic
+tempered distribution has Fourier transform supported on the integer
+lattice (its Fourier series), which is the claim.
+\end{proof}
+
+\begin{corollary}\label{cor:blind}
+No estimator that evaluates the (truncated) Laplace transform of measured
+data on the unit circle and inverts in $u$ can produce mass at non-integer
+$\alpha$. In particular, fractional orders of a black-box system cannot be
+read off as non-integer spectral lines from such a construction, for any
+window $A$, sampling rate, or FFT length.
+\end{corollary}
+
+The obstruction is a statement about the \emph{readout}, not about the
+data: on $\operatorname{Re}s>0$ the Laplace transform determines $y$
+uniquely, so the fractional information is present---it is the circle
+parametrization that projects it onto $\Z$. What survives the projection is
+a decay signature. For $F(s)=s^{-1/2}$, restricting the branch
+$\ee^{-\ii u/2}$ to one period $u\in(0,2\pi)$ and expanding in a Fourier
+series,
+\begin{equation}\label{eq:branchsignature}
+c_m=\frac{1}{2\pi}\int_0^{2\pi}\ee^{-\ii u/2}\ee^{-\ii mu} \dd u
+=\frac{-\ii}{\pi\, (m+\tfrac12)} ,
+\end{equation}
+an integer comb decaying only like $1/m$---the fingerprint of a branch cut
+crossing the contour, as opposed to the geometric decay of an analytic
+$H$. Slow comb decay can thus \emph{detect} non-integer content, but the
+order itself cannot be localized this way. When $H$ is known as a formula,
+the lift to $u\in\R$ (Section~\ref{sec:representation}) is available and
+half-integer orders reappear at period $4\pi$; for data, they do not.
+
+\section{The logarithmic-spiral estimator}\label{sec:spiral}
+
+The failure mechanism of the circle is that $s=\ee^{\ii u}$ revisits the
+same point every $2\pi$ while $s^{\alpha}$, $\alpha\notin\Z$, does not.
+The fix is to sample where the contour never revisits: a logarithmic
+spiral
+\begin{equation}\label{eq:spiral}
+s_j=\ee^{(\sigma+\ii)u_j}, \qquad u_j=u_0+j\, \Delta u, \quad j=0, \dots,N-1,
+\qquad \sigma\neq0 ,
+\end{equation}
+single-valued along the contour. If the transform under study is a finite
+comb with distinct real orders $\alpha_m$, then its samples on the spiral
+take the form of a finite exponential sum in the index $j$:
+\begin{equation}\label{eq:expsum}
+F(s_j) = \sum_{m=1}^{M} c_m\, z_m^{\,j}, \qquad
+z_m=\ee^{(\sigma+\ii) \Delta u\, \alpha_m} ,
+\end{equation}
+an exponential sum in the sample index $j$. Order identification is
+thereby converted into \emph{line-spectrum estimation}, for which
+classical super-resolution tools exist; we use the matrix-pencil method of
+Hua and Sarkar \cite{HuaSarkar1990} (Hankel data matrix, SVD, shifted
+singular-subspace pencil), which is exact for noiseless data with
+$N\ge2M$ and degrades gracefully with noise.
+
+\begin{proposition}[Identifiability on the spiral]\label{prop:injective}
+For $\sigma\neq0$ and distinct real $\alpha_m$, the nodes $z_m$ in
+\eqref{eq:expsum} are distinct, and each $\alpha_m$ is uniquely determined
+by $z_m$: indeed $\ln|z_m|=\sigma\, \Delta u\, \alpha_m$ is single-valued, so
+$\alpha_m=\ln|z_m|/(\sigma\Delta u)$ with no branch condition. If moreover
+$|\Delta u\, \alpha_m|<\pi$, the better-conditioned two-component formula
+$\alpha_m=\operatorname{Log}z_m/\big((\sigma+\ii) \Delta u\big)$ applies,
+with $\operatorname{Log}$ the principal branch.
+\end{proposition}
+
+\begin{proof}
+$z_m=z_{m'}$ requires $(\sigma+\ii)\Delta u(\alpha_m-\alpha_{m'}) \in
+2\pi\ii\Z$; the real part forces $\sigma\Delta u(\alpha_m-\alpha_{m'})=0$,
+hence $\alpha_m=\alpha_{m'}$. The moduli identity is immediate, and under
+$|\Delta u\, \alpha_m|<\pi$ the exponent lies in the principal strip.
+\end{proof}
+
+The proposition isolates the degree of freedom the circle lacks: at
+$\sigma=0$ the moduli collapse to $1$ and distinct orders can alias; within
+the family $\ee^{(\sigma+\ii)u}$, any $\sigma\neq0$ restores injectivity.
+(Sampling on the positive real axis, $s=\ee^{u}$, would also break the
+periodicity, at the cost of a classical real-node Prony problem; we
+return to a variant of it in Section~\ref{sec:e5}.)
+
+\paragraph{Working from data.} For measured $y$ the values
+$F(s_j)=\widehat{Y}_{\!A}(s_j)$ must converge, which requires
+$\operatorname{Re}s_j>0$ when $y$ decays slowly (fractional impulse
+responses decay algebraically; steady states not at all). We therefore
+restrict the spiral to an arc in the right half-plane,
+$u\in[u_0, u_0+(N-1) \Delta u]\subset(-\tfrac\pi2, \tfrac\pi2)$, on which
+the truncation error is bounded by
+$\ee^{-A\min_j \operatorname{Re}s_j}$ up to algebraic factors. Steady states
+need no special treatment here: a constant component of $y$ is itself part
+of the order comb of $\widehat{Y}$ (mass $y_\infty$ at $\alpha=-1$) and is
+recovered as such, since the arc avoids the divergence region that plagued
+the circle. Two practical caveats: the model order $M$ must be chosen (the
+singular-value profile of the pencil matrix gives a reliable indicator, cf.\
+Section~\ref{sec:experiments}), and recovery of \emph{continuous} order
+densities from a right-half-plane arc is a Laplace-type inversion and hence
+exponentially ill-posed---consistent with the conditional-stability results
+for distributed-order inverse problems \cite{LiuSunYamamoto2021}; the
+line-spectrum setting (finite combs) is the regime in which the method is
+exact.
+
+\section{Numerical experiments}\label{sec:experiments}
+
+All experiments are reproduced by \texttt{order\_spectrum.py} (NumPy only);
+E5 by \texttt{cantor\_pencil.py} and \texttt{deaf\_channel.py}. Laplace
+transforms of sampled data are computed with composite Simpson
+quadrature.
+
+\subsection{E1: integer-order system from its step response}
+
+$H(s)=1/(s^{2}+4s+5)$, poles $-2\pm\ii$ ($\beta=2$,
+$|\mathrm{poles}|=\sqrt5$), step response
+$y(t)=\tfrac15-\tfrac15\ee^{-2t}(2\sin t+\cos t)$ sampled with
+$N_t=65537$ points on $[0,12]$; $N_u=64$ circle points. The steady state is
+estimated as the mean of the last $2\%$ of samples. Exact Taylor
+coefficients satisfy $5a_n+4a_{n-1}+a_{n-2}=0$ for $n\ge2$, with
+$5a_0=1$ and $5a_1+4a_0=0$; the corrected and naive estimates are compared
+in Table~\ref{tab:E1} below.
+
+\begin{table}[ht]
+\centering\small
+\begin{tabular}{rrrr}
+\toprule
+$n$ & exact $a_n$ & corrected pipeline & naive pipeline \\
+\midrule
+0 & $+0.2$        & $+0.200000000005$  & $2.5\times10^{-12}$ \\
+1 & $-0.16$       & $-0.160000000057$  & $+2.24$ \\
+2 & $+0.088$      & $+0.088000000323$  & $-14.31$ \\
+3 & $-0.0384$     & $-0.038400001209$  & $+57.56$ \\
+4 & $+0.01312$    & $+0.013120003331$  & $-172.8$ \\
+5 & $-0.002816$   & $-0.002816007179$  & $+414.7$ \\
+6 & $-0.0003712$  & $-0.000371187522$  & $-829.4$ \\
+\bottomrule
+\end{tabular}
+\caption{E1. Corrected pipeline: max error $1.2\times10^{-8}$ with
+estimated steady state ($8.1\times10^{-9}$ if $y_\infty$ is known). The
+naive pipeline is corrupted exactly as predicted by
+Proposition~\ref{prop:bias}: at bin~1 the predicted excess is
+$-y_\infty(-A)=+2.400$; the observed excess is $+2.400$. At bin 6,
+$b_5=-0.2\cdot12^{6}/6!=-829.44$ matches all printed digits.}
+\label{tab:E1}
+\end{table}
+
+\subsection{E2: the aliasing signature of a branch cut}
+
+Sampling the branch $F(\ee^{\ii u})=\ee^{-\ii u/2}$ of $s^{-1/2}$ at
+$N_u=64$ points of one period and FFT-ing yields bins matching the
+closed form \eqref{eq:branchsignature}: $|\mathrm{bin}_0|=0.6367$ vs.\
+$1/(\pi\cdot\tfrac12)=0.6366$; $|\mathrm{bin}_3|=0.0914$ vs.\ $0.0909$;
+$|\mathrm{bin}_{10}|=0.0317$ vs.\ $0.0303$ (the residuals combine the
+$m+\ell N_u$ aliasing sums with a $1/N_u=0.0156$ offset from sampling the
+branch-cut discontinuity at $u=0$; the latter dominates in the high bins).
+Energy spreads over \emph{all} integer bins with $1/(m+\tfrac12)$ decay;
+nothing appears at $\alpha=-\tfrac12$, illustrating
+Theorem~\ref{thm:aliasing}.
+
+\subsection{E3: spiral estimator, exact fractional samples}
+
+$H(s)=s^{-1/2}+0.5\,s^{1.3}$ sampled on the spiral $\sigma=0.2$,
+$\Delta u=0.3$. With $N=8$ noise-free samples the matrix pencil returns
+$\alpha=(-0.500000000000,\,+1.300000000000)$, weights $(1.0, \,0.5)$,
+order-position error $5\times10^{-16}$. With $N=64$ and relative sample
+noise $10^{-8}$ (resp.\ $10^{-4}$) the order errors are
+$4.7\times10^{-9}$ (resp.\ $4.7\times10^{-5}$): errors scale linearly with
+the noise floor.
+
+\subsection{E4: fractional identification from raw time samples}
+
+$y(t)=1/\sqrt{\pi t}+2$, whose transform is
+$\widehat{Y}(s)=s^{-1/2}+2\,s^{-1}$: a two-line order comb with one
+fractional line. The substitution $t=v^{2}$ removes the integrable
+singularity ($\int_0^{A}y\,\ee^{-st}\dd t=\int_0^{\sqrt A}(2/\sqrt\pi+4v)\,
+\ee^{-sv^{2}}\dd v$), sampled with $N_v=32769$ points, $A=120$. The spiral
+arc $\sigma=0.15$, $u\in[-1.35,1.35]$, $N=64$ lies in
+$\operatorname{Re}s\ge0.17$; the recovered orders and weights are reported
+in Table~\ref{tab:E4} below.
+
+\begin{table}[ht]
+\centering\small
+\begin{tabular}{ccccc}
+\toprule
+noise (rel., on $y$) & $\hat\alpha_1$ & $\hat\alpha_2$ &
+$\hat c_1$ & $\hat c_2$ \\
+\midrule
+$0$        & $-1.00000000$ & $-0.50000000$ & $2.00000$ & $1.00000$ \\
+$10^{-4}$  & $-0.99997350$ & $-0.49995259$ & $2.00021$ & $0.99979$ \\
+\bottomrule
+\end{tabular}
+\caption{E4. True $(\alpha, c)=(-1,2), (-\tfrac12,1)$. Noise-free order
+error $1.8\times10^{-9}$; at $10^{-4}$ noise, $4.7\times10^{-5}$. The
+pencil singular values ($97.1, \ 0.89,\ 1.6\times10^{-9}, \dots$
+noise-free; third value rising to $7.8\times10^{-6}$ under noise) cleanly
+indicate the model order $M=2$.}
+\label{tab:E4}
+\end{table}
+
+Experiment E4 performs, from time-domain samples alone, precisely the task
+that Corollary~\ref{cor:blind} proves impossible for the unit-circle
+readout: localization of a non-integer order. The steady-state-like
+component ($2/s$) is recovered as the $\alpha=-1$ line rather than
+subtracted, as promised in Section~\ref{sec:spiral}.
+
+\subsection{E5: a calibration standard from fractal geometry---complex
+dimensions of the Cantor string}\label{sec:e5}
+
+Experiments E1--E4 validate the estimator against synthetic signals drawn
+from the very model class the method assumes; the ground truth is planted
+by the experimenter. A sharper test requires systems whose exponential-sum
+structure is a \emph{theorem} rather than a construction, with parameters
+known through an entirely independent computational route, and---ideally---
+available in families where a dichotomy predicted by theory (uniform versus
+non-uniform damping) is \emph{certified} rather than conjectural. The
+theory of fractal strings supplies exactly this: a bounded open set
+$\mathcal{L}=\{\ell_j\}\subset\R$ has geometric zeta function
+$\zeta_{\mathcal{L}}(s)=\sum_j \ell_j^{s}$---an instance of the
+representation \eqref{eq:orderintegral} with order comb at the
+log-lengths---whose poles, the \emph{complex dimensions}, govern the
+string's geometric and spectral oscillations
+\cite{LapidusPomerance1993,LapidusVanFrankenhuijsen2013}.
+Self-similar (``lattice'') strings have all complex dimensions on one
+vertical line, a theorem rather than a hypothesis; this is the calibration
+standard used below.
+
+\paragraph{The system.} The Cantor string (complement of the middle-thirds
+Cantor set in $[0,1]$) has lengths $3^{-n}$ with multiplicities $2^{n-1}$,
+$\zeta_{\mathcal{L}}(s)=3^{-s}/(1-2\cdot3^{-s})$, and complex dimensions
+known in closed form:
+\begin{equation}\label{eq:cantordims}
+\omega_k = D+\ii kp, \qquad
+D=\frac{\log2}{\log3}=0.6309\,2975\ldots,
+\end{equation}
+\begin{equation*}
+p=\frac{2\pi}{\log3}=5.7192\,0173\ldots, \qquad k\in\Z,
+\end{equation*}
+all on the single vertical line $\operatorname{Re}s=D$: the \emph{lattice
+case}. The frequency (spectral) counting function of the associated
+Dirichlet Laplacian satisfies the spectral factorization
+$\zeta_\nu(s)=\zeta_{\mathcal{L}}(s)\,\zeta(s)$, so each geometric
+oscillation reaches the spectrum multiplied by the channel gain
+$\zeta(\omega_k)$; the Lapidus--Maier inverse spectral theorem
+\cite{LapidusMaier1995} identifies zeros of $\zeta$ with null frequencies
+of this geometry-to-spectrum channel, with the critical line as the only
+possibly-deaf band.
+
+\paragraph{Method.} In the logarithmic variable $\lambda=\log x$, Poisson
+summation gives the Cantor string's geometric measure \emph{exactly} as a
+mode expansion,
+\begin{equation*}
+\sum_{n\ge1}2^{n-1}\delta(\lambda-n\log3)
+=\tfrac{1}{2\log3}\sum_{k\in\Z}\ee^{\omega_k\lambda}
+\end{equation*}
+(no error term---in contrast with arithmetic combs such as the prime-power
+comb, where the analogous expansion carries an explicit-formula error
+term). Gaussian smoothing by
+$\varphi_h$ multiplies mode $k$ by $\ee^{\omega_k^{2}h^{2}/2}$, truncating
+the tower to an effective model order exactly as in
+Section~\ref{sec:spiral}; sampling at $\lambda_j=\lambda_0+j\Delta$
+produces the exponential-sum model \eqref{eq:expsum} with nodes
+$z_k=\ee^{\omega_k\Delta}$, and the matrix pencil returns
+$\operatorname{Re}\hat\omega=\ln|z|/\Delta$ (the damping/Minkowski-dimension
+line) and $\operatorname{Im}\hat\omega=\arg z/\Delta$ (oscillatory
+dimensions), by the argument of Proposition~\ref{prop:injective} (with the
+roles of contour and orders interchanged: a real logarithmic grid
+resolving complex orders). For the spectral run, the
+smoothed spectral measure has atoms at $\lambda=\log(m\cdot3^{n})$; its
+smooth part is the Weyl term $\ee^{\lambda}$ (total length $1$, the
+string's steady state, subtracted exactly as in
+Corollary~\ref{cor:corrected}) plus modes weighted by
+$\zeta(\omega_k)/(2\log3)$. Parameters throughout: $h=0.10$,
+$\Delta=0.07$, $N=64$, $\lambda_0=5.0$, pencil parameter $N/2$,
+energy-threshold retention, a priori filter
+$\operatorname{Re}\hat\omega\in(0.2,1.2)$.
+
+\paragraph{F1: complex dimensions from geometry.} Input: the lengths only.
+
+\begin{table}[ht]
+\centering\small
+\begin{tabular}{cccc}
+\toprule
+$\operatorname{Re}\hat\omega$ & $\operatorname{Im}\hat\omega$ & exact
+$\operatorname{Im}=kp$ & $k$ \\
+\midrule
+$0.630930$ & $0.000000$  & $0.000000$  & $0$ \\
+$0.630930$ & $5.719202$  & $5.719202$  & $1$ \\
+$0.630930$ & $11.438403$ & $11.438403$ & $2$ \\
+$0.630930$ & $17.157605$ & $17.157605$ & $3$ \\
+$0.630930$ & $22.876807$ & $22.876807$ & $4$ \\
+$0.630930$ & $28.596009$ & $28.596009$ & $5$ \\
+$0.630930$ & $34.315211$ & $34.315210$ & $6$ \\
+$0.630928$ & $40.034412$ & $40.034412$ & $7$ \\
+\bottomrule
+\end{tabular}
+\caption{E5/F1: complex dimensions of the Cantor string recovered from
+geometric data alone. Every real part equals $D=\log2/\log3$ to the
+printed six decimals: the lattice theorem measured by the instrument---a
+uniformly damped order comb, here certified truth rather than conjecture.}
+\label{tab:E5}
+\end{table}
+
+Every real part equals $D$ to the printed six decimals: the lattice
+theorem, measured by the instrument. A ninth node ($k=8$) emerges degraded
+at the smoothing floor $\ee^{-k^{2}p^{2}h^{2}/2}$, exactly where the
+weight ladder predicts the retained set to end.
+
+\paragraph{F2: the same dimensions from the sound, with $\zeta$ as the
+measured gain.} Input: the spectral counting data, Weyl term subtracted.
+The pencil recovers the same tower ($\operatorname{Re}\hat\omega=0.630930$
+for $k\le5$, drifting to $0.630937$ at the floor), and the amplitude ratio
+of each spectral mode to its geometric counterpart matches the channel
+gain independently computed from $\zeta$ to four decimals in every one of
+eight modes (e.g.\ $k=0$: measured $2.1598$ vs.\ $|\zeta(D)|=2.1598$;
+$k=5$: measured $2.2269$ vs.\ $2.2269$): an \emph{acoustic measurement of
+$|\zeta|$ along the vertical line $\operatorname{Re}s=D$}, obtained
+entirely from integer counting data, realizing the spectral factorization
+$\zeta_\nu=\zeta_{\mathcal{L}}\cdot\zeta$ as a live, measured transfer
+function.
+
+\paragraph{F3: the deaf channel at the critical line.} To exhibit the
+Lapidus--Maier obstruction directly, a generalized string with geometric
+counting function
+$N_{\mathcal{L}}(y)=y^{1/2}+\varepsilon\operatorname{Re}(y^{1/2+\ii\gamma})$,
+$\varepsilon=0.5$ (geometry oscillating at complex dimension
+$\tfrac12+\ii\gamma$), gives, after computing $N_\nu$ by direct summation
+(no $\zeta$ anywhere in the forward model) and subtracting the Weyl term: a
+control frequency $\gamma=10.0$ (not a zero) survives with measured
+amplitude $0.7747$ against a predicted $\varepsilon|\zeta(\tfrac12+10\ii)|
+=0.7746$; the geometric oscillation at $\gamma=14.134725$ (the first zeta
+zero), of the same input amplitude $0.5$, survives with measured amplitude
+$\mathbf{0.0007}$ against a predicted $0.0000$. A fractal string can hide
+information from its own sound precisely at the zeta zeros; the
+estimator's blind spots, read off as measured channel gains, \emph{are}
+the zeros---the inverse-spectral content of the Riemann Hypothesis made
+visible as an instrument reading, with no claim of bearing on the
+Hypothesis itself: the zeros are the kernel of a forward map, and
+information annihilated by a forward map is unrecoverable by any
+estimator.
+
+\paragraph{Why this experiment matters for the estimator.} F1--F3 supply
+three validation claims that E1--E4 cannot. (i)~\emph{End-to-end
+correctness against an external, independently-computed standard}, in a
+regime (F1) where the target values are proven rather than conjectured.
+(ii)~\emph{The complex-order regime}: the pencil and the modulus formula
+of Proposition~\ref{prop:injective} resolve complex orders, and F2 shows
+the recovered \emph{amplitudes}, not just positions, carry independently
+verifiable physical content (the values of $\zeta$ itself). (iii)~A
+\emph{predicted failure mode}, deliberately engineered (F3): the
+estimator's channel gain vanishes exactly where theory says it must,
+demonstrating that the method's blind spots are structural, not
+accidental, and are located precisely where the theory of
+Section~\ref{sec:circle}--\ref{sec:spiral} predicts.
+
+\section{Related work}\label{sec:related}
+
+\paragraph{Distributed-order systems and order distributions.}
+Equation \eqref{eq:orderintegral} is the transfer function of
+distributed-order systems, originating with Caputo
+\cite{Caputo1969,Caputo1995,Caputo2001} and developed as an ``order
+domain'' by Bagley and Torvik \cite{BagleyTorvik2000a, BagleyTorvik2000b};
+Lorenzo and Hartley formalized variable- and distributed-order operators
+\cite{LorenzoHartley2002} and the Laplace-domain operator classes that
+order distributions generate \cite{HartleyLorenzo2011}, and the monograph
+\cite{JiaoChenPodlubny2012} treats stability and simulation of the class;
+see \cite{DingReview2021} for a survey. The identification of order
+distributions was posed and attacked by Hartley and Lorenzo
+\cite{HartleyLorenzo1999,HartleyLorenzo2003}: they already observe the
+structural identity behind \eqref{eq:naiveinversion} (the order integral
+as a Laplace transform in $-\log s$, their $r$-Laplace transform,
+Eq.~(18) of \cite{HartleyLorenzo1999}) and represent integer systems as
+impulsive order distributions; their estimator, however, discretizes the
+order axis and solves least squares against frequency-response data, as do
+its successors \cite{NazarianHaeri2010,DuanLi2021}. Optimization- and
+instrumental-variable estimation of discrete fractional orders is
+developed in \cite{VictorMalti2013,VictorMalti2022}; log-periodogram
+regression estimates long-memory orders in time series
+\cite{GewekePorterHudak1983}. The present paper differs in estimator
+class: closed-form/spectral rather than fitted, with the obstruction
+theorem delimiting where the spectral route is possible.
+
+\paragraph{Cauchy-integral coefficient extraction.} Computing
+Taylor--Laurent coefficients by trapezoidal Cauchy integrals on circles is
+classical \cite{LynessMoler1967,Henrici1979,Fornberg1981}, with definitive
+accuracy and radius-selection analysis in \cite{Bornemann2011} and a
+modern roots-of-unity framework in \cite{AustinKravanjaTrefethen2014}.
+Corollary~\ref{cor:corrected} identifies our corrected integer-order
+pipeline with this method applied to a transform computed from data; the
+adjacent inverse direction (Weeks-type inversion, unit-circle FFTs of
+Laplace-domain functions) is surveyed in \cite{Weideman1999}, and fully
+numerical \emph{forward} Laplace transforms of sampled data are treated in
+\cite{WeidemanFornberg2023}. The information content of the integer bins
+is that of classical time moments \cite{GibilaroLees1969}.
+
+\paragraph{What is new here.} To our knowledge: the exact bias formula
+\eqref{eq:bias} for step-response truncation on circle contours; the
+aliasing theorem (Theorem~\ref{thm:aliasing}) with the branch-cut decay
+signature \eqref{eq:branchsignature} as the data-side limit of the
+unit-circle program; the identifiability statement of
+Proposition~\ref{prop:injective}; and the composition
+\emph{data $\to$ truncated Laplace transform on a right-half-plane spiral
+arc $\to$ matrix-pencil line spectrum $\to$ orders and weights}, validated
+from raw time samples; and the use of fractal-string complex dimensions as
+a calibration benchmark for order-distribution estimators (E5), including
+an acoustic measurement of the Riemann zeta function along a vertical
+line and a demonstration of the estimator's channel gain vanishing at a
+zeta zero. Each ingredient separately is standard.
+
+\section*{Funding}
+
+This research did not receive any specific grant from funding agencies in
+the public, commercial, or not-for-profit sectors.
+
+\section*{Conflict of Interest}
+
+The author declares no conflict of interest.
+
+\section*{Data Availability Statement}
+
+\begin{sloppypar}
+No experimental or proprietary data were used in this work; all numerical
+experiments (Section~\ref{sec:experiments}) use synthetic signals generated
+in closed form by the accompanying code, including E5, whose geometric and
+spectral counting data are generated in closed form from the Cantor
+string's defining lengths within the code itself. The complete source code
+implementing every experiment, together with the exact numerical output
+validating it, is openly available at
+\url{https://drive.google.com/file/d/1eselh0HetF4mnDnc4iptheXgnBU57oXE/view}
+(see Appendix~\ref{app:repro} for details).
+\end{sloppypar}
+
+\section*{Declaration of AI-Assisted Technologies}
+
+During preparation of this work the author used a large language model
+(LLM) to verify derivations, search prior literature, help derive
+Propositions~\ref{prop:moments} and~\ref{prop:bias} and
+Theorem~\ref{thm:aliasing}, design and implement the accompanying numerical
+code. After using this tool the
+author reviewed and edited all content as
+needed and takes full responsibility for the content of this publication.
+
+\appendix
+\section{Proofs}\label{app:proofs}
+
+\begin{proof}[Proof of Proposition~\ref{prop:moments}]
+Expanding $\ee^{-\tau\ee^{\ii u}}=\sum_{j\ge0}\frac{(-\tau)^{j}}{j!}
+\ee^{\ii ju}$ (absolutely convergent, uniformly on compacts) and
+integrating over $[0,A]$ termwise gives
+$\widehat{y}(u)=\sum_{j\ge0}\mu_j\,\ee^{\ii ju}$ with
+$\mu_j=\frac{(-1)^{j}}{j!}\int_0^{A}\tau^{j}y(\tau) \dd\tau$; the DFT of a
+uniform sampling of $\sum_j\mu_j\ee^{\ii ju}$ aliases $j$ modulo $N$ into
+the stated sum.
+\end{proof}
+
+\begin{proof}[Proof of Proposition~\ref{prop:bias}]
+Write $\int_0^{A}=\int_0^{\infty}-\int_A^{\infty}$ on both components of
+$y=y_\infty+g$. The constant part gives
+$y_\infty\big(1-\ee^{-sA}\big)/s$, whose expansion
+\begin{align*}
+\frac{y_\infty(1-\ee^{-sA})}{s}
+&=\frac{y_\infty}{s}\Big(1-\sum_{k\ge0}\frac{(-sA)^{k}}{k!} \Big)
+=-y_\infty\sum_{k\ge1}\frac{(-A)^{k}s^{k-1}}{k!} \\
+&=-y_\infty\sum_{m\ge0}\frac{(-A)^{m+1}}{(m+1)!}\,s^{m}
+\end{align*}
+is entire: the pole $y_\infty/s$ cancels exactly (which is why no mass
+appears at $\alpha=-1$) and the coefficient of $s^{m}$ is
+\eqref{eq:bias}. The transient part contributes $G(s)$ minus its tail,
+bounded as stated since $|\ee^{-s\tau}|=\ee^{-\tau\cos u}$ on $|s|=1$.
+\end{proof}
+
+\emph{Note.} The Poisson-summation and Gaussian-smoothing identities used
+in E5 follow the standard explicit-formula machinery for self-similar
+fractal strings \cite{LapidusVanFrankenhuijsen2013}: the geometric measure
+of the Cantor string is log-periodic after renormalization by
+$\ee^{-D\lambda}$, so the Gaussian--exponential integrals evaluate exactly
+to
+$\int \varphi_h(u)\ee^{-\omega u}\dd u = \ee^{\omega^{2}h^{2}/2}$ for each
+complex dimension $\omega=\omega_k$, with no further error term---in
+contrast with arithmetic combs such as the prime-power comb.
+
+\section{Reproducibility}\label{app:repro}
+
+\begin{sloppypar}
+\texttt{order\_spectrum.py} (NumPy) implements
+\texttt{circle\_taylor\_coeffs} (Corollary~\ref{cor:corrected}),
+\texttt{naive\_circle\_coeffs} (for Table~\ref{tab:E1}'s bias column),
+\texttt{matrix\_pencil} \cite{HuaSarkar1990}, and
+\texttt{spiral\_order\_estimate} (Section~\ref{sec:spiral}); running the
+file reproduces E1--E4 verbatim. \texttt{cantor\_pencil.py} (NumPy +
+mpmath, the latter only for the independent reference $|\zeta|$ values
+used to check F2; no zeta values enter the forward data) reproduces F1 and
+F2 and Table~\ref{tab:E5}; \texttt{deaf\_channel.py} reproduces F3. Code
+available at
+\url{https://drive.google.com/file/d/1eselh0HetF4mnDnc4iptheXgnBU57oXE/view}
+(\texttt{order\_spectrum.py}, E1--E4),
+\url{https://drive.google.com/file/d/1AMGYCC5RAgxeH3odohpvt_nBpiDiR6zQ/view}
+(\texttt{cantor\_pencil.py}, F1--F2), and
+\url{https://drive.google.com/file/d/1Giu4cQ-A-zB85gdzpZ1xmXw0NMUc6O7U/view}
+(\texttt{deaf\_channel.py}, F3).
+\end{sloppypar}
+
+\begin{thebibliography}{99}\small
+
+\bibitem{AustinKravanjaTrefethen2014} A.~P.~Austin, P.~Kravanja,
+L.~N.~Trefethen, Numerical algorithms based on analytic function values at
+roots of unity, \emph{SIAM J.\ Numer.\ Anal.} \textbf{52} (2014)
+1795--1821.
+
+\bibitem{BagleyTorvik2000a} R.~L.~Bagley, P.~J.~Torvik, On the existence of
+the order domain and the solution of distributed order equations, Part~I,
+\emph{Int.\ J.\ Appl.\ Math.} \textbf{2} (2000) 865--882.
+
+\bibitem{BagleyTorvik2000b} R.~L.~Bagley, P.~J.~Torvik, On the existence of
+the order domain and the solution of distributed order equations, Part~II,
+\emph{Int.\ J.\ Appl.\ Math.} \textbf{2} (2000) 965--988.
+
+\bibitem{Bornemann2011} F.~Bornemann, Accuracy and stability of computing
+high-order derivatives of analytic functions by Cauchy integrals,
+\emph{Found.\ Comput.\ Math.} \textbf{11} (2011) 1--63.
+
+\bibitem{Caputo1969} M.~Caputo, \emph{Elasticit\`a e Dissipazione},
+Zanichelli, Bologna, 1969.
+
+\bibitem{Caputo1995} M.~Caputo, Mean fractional-order-derivatives
+differential equations and filters, \emph{Ann.\ Univ.\ Ferrara}
+\textbf{41} (1995) 73--84.
+
+\bibitem{Caputo2001} M.~Caputo, Distributed order differential equations
+modelling dielectric induction and diffusion, \emph{Fract.\ Calc.\ Appl.\
+Anal.} \textbf{4} (2001) 421--442.
+
+\bibitem{DingReview2021} W.~Ding, S.~Patnaik, S.~Sidhardh, F.~Semperlotti,
+Applications of distributed-order fractional operators: a review,
+\emph{Entropy} \textbf{23} (2021) 110.
+
+\bibitem{DuanLi2021} J.-S.~Duan, Y.~Li, Identification of the system with
+distributed-order derivatives, \emph{Fract.\ Calc.\ Appl.\ Anal.}
+\textbf{24} (2021) 1619--1628.
+
+\bibitem{Fornberg1981} B.~Fornberg, Numerical differentiation of analytic
+functions, \emph{ACM Trans.\ Math.\ Software} \textbf{7} (1981) 512--526.
+
+\bibitem{GewekePorterHudak1983} J.~Geweke, S.~Porter-Hudak, The estimation
+and application of long memory time series models, \emph{J.\ Time Ser.\
+Anal.} \textbf{4} (1983) 221--238.
+
+\bibitem{GibilaroLees1969} L.~G.~Gibilaro, F.~P.~Lees, The reduction of
+complex transfer function models to simple models using the method of
+moments, \emph{Chem.\ Eng.\ Sci.} \textbf{24} (1969) 85--93.
+
+\bibitem{HartleyLorenzo1999} T.~T.~Hartley, C.~F.~Lorenzo, \emph{Fractional
+System Identification: An Approach Using Continuous Order-Distributions},
+NASA/TM-1999-209640, NASA Glenn Research Center, 1999.
+
+\bibitem{HartleyLorenzo2003} T.~T.~Hartley, C.~F.~Lorenzo, Fractional-order
+system identification based on continuous order-distributions,
+\emph{Signal Process.} \textbf{83} (2003) 2287--2300.
+
+\bibitem{HartleyLorenzo2011} T.~T.~Hartley, C.~F.~Lorenzo,
+Order-distributions and the Laplace-domain logarithmic operator,
+\emph{Adv.\ Difference Equ.} \textbf{2011}:59 (2011).
+
+\bibitem{Henrici1979} P.~Henrici, Fast Fourier methods in computational
+complex analysis, \emph{SIAM Rev.} \textbf{21} (1979) 481--527.
+
+\bibitem{HuaSarkar1990} Y.~Hua, T.~K.~Sarkar, Matrix pencil method for
+estimating parameters of exponentially damped/undamped sinusoids in
+noise, \emph{IEEE Trans.\ Acoust.\ Speech Signal Process.} \textbf{38}
+(1990) 814--824.
+
+\bibitem{JiaoChenPodlubny2012} Z.~Jiao, Y.~Chen, I.~Podlubny,
+\emph{Distributed-Order Dynamic Systems: Stability, Simulation,
+Applications and Perspectives}, SpringerBriefs in Control, Automation and
+Robotics, Springer, London, 2012.
+
+\bibitem{LapidusMaier1995} M.~L.~Lapidus, H.~Maier, The Riemann hypothesis
+and inverse spectral problems for fractal strings, \emph{J.\ London Math.\
+Soc.} (2) \textbf{52} (1995) 15--34.
+
+\bibitem{LapidusPomerance1993} M.~L.~Lapidus, C.~Pomerance, The Riemann
+zeta-function and the one-dimensional Weyl--Berry conjecture for fractal
+drums, \emph{Proc.\ London Math.\ Soc.} (3) \textbf{66} (1993) 41--69.
+
+\bibitem{LapidusVanFrankenhuijsen2013} M.~L.~Lapidus, M.~van
+Frankenhuijsen, \emph{Fractal Geometry, Complex Dimensions and Zeta
+Functions: Geometry and Spectra of Fractal Strings}, 2nd Ed., Springer
+Monographs in Mathematics, Springer, New York, 2013.
+
+\bibitem{LiuSunYamamoto2021} J.~Liu, C.~Sun, M.~Yamamoto, Recovering the
+weight function in distributed order fractional equation from interior
+measurement, \emph{Appl.\ Numer.\ Math.} (2021).
+
+\bibitem{LorenzoHartley2002} C.~F.~Lorenzo, T.~T.~Hartley, Variable order
+and distributed order fractional operators, \emph{Nonlinear Dynam.}
+\textbf{29} (2002) 57--98.
+
+\bibitem{LuchkoKiryakova2013} Y.~Luchko, V.~Kiryakova, The Mellin integral
+transform in fractional calculus, \emph{Fract.\ Calc.\ Appl.\ Anal.}
+\textbf{16} (2013) 405--430.
+
+\bibitem{LynessMoler1967} J.~N.~Lyness, C.~B.~Moler, Numerical
+differentiation of analytic functions, \emph{SIAM J.\ Numer.\ Anal.}
+\textbf{4} (1967) 202--210.
+
+\bibitem{NazarianHaeri2010} P.~Nazarian, M.~Haeri, Generalization of order
+distribution concept used in the fractional order system identification,
+\emph{Signal Process.} \textbf{90} (2010) 2243--2252.
+
+\bibitem{VictorMalti2013} S.~Victor, R.~Malti, H.~Garnier, A.~Oustaloup,
+Parameter and differentiation order estimation in fractional models,
+\emph{Automatica} \textbf{49} (2013) 926--935.
+
+\bibitem{VictorMalti2022} S.~Victor, A.~Mayoufi, R.~Malti, M.~Chetoui,
+M.~Aoun, System identification of MISO fractional systems: parameter and
+differentiation order estimation, \emph{Automatica} \textbf{141} (2022)
+110268.
+
+\bibitem{Weideman1999} J.~A.~C.~Weideman, Algorithms for parameter
+selection in the Weeks method for inverting the Laplace transform,
+\emph{SIAM J.\ Sci.\ Comput.} \textbf{21} (1999) 111--128.
+
+\bibitem{WeidemanFornberg2023} J.~A.~C.~Weideman, B.~Fornberg, Fully
+numerical Laplace transform methods, \emph{Numer.\ Algorithms}
+\textbf{92} (2023) 985--1006.
+
+\end{thebibliography}
+\end{document}
